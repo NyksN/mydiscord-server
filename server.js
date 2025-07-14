@@ -18,6 +18,25 @@ let channels = {
     "Oyun": [],
 };
 let users = {};
+let screenBroadcasters = {}; // { channelName: [{ id, username }] }
+
+function getUsers(channel) {
+    return Object.values(users)
+        .filter(u => u.channel === channel)
+        .map(u => u.username);
+}
+
+function broadcastVoiceUsers(channel) {
+    const inChannel = Object.entries(users)
+        .filter(([_, u]) => u.channel === channel)
+        .map(([id, u]) => ({ id, username: u.username }));
+    io.to(channel).emit("voice-users", inChannel);
+}
+
+function broadcastScreenBroadcasters(channel) {
+    const broadcasters = screenBroadcasters[channel] || [];
+    io.to(channel).emit("screen-broadcasters", broadcasters);
+}
 
 io.on("connection", (socket) => {
     console.log("Bağlandı:", socket.id);
@@ -27,6 +46,7 @@ io.on("connection", (socket) => {
         socket.join(channel);
         socket.emit("chat-history", channels[channel]);
         io.to(channel).emit("user-list", getUsers(channel));
+        broadcastScreenBroadcasters(channel); // yayındaki kullanıcılar yeni gelene de gözüksün
     });
 
     socket.on("switch-channel", (newChannel) => {
@@ -37,6 +57,7 @@ io.on("connection", (socket) => {
         socket.emit("chat-history", channels[newChannel]);
         io.to(newChannel).emit("user-list", getUsers(newChannel));
         if (prev) io.to(prev).emit("user-list", getUsers(prev));
+        broadcastScreenBroadcasters(newChannel); // kanal değişiminde yayıncıları gönder
     });
 
     socket.on("send-message", (msg) => {
@@ -47,32 +68,45 @@ io.on("connection", (socket) => {
         io.to(user.channel).emit("new-message", message);
     });
 
-    // Sesli oda: WebRTC sinyalleşme
-    socket.on("webrtc-signal", ({ to, data }) => {
-        io.to(to).emit("webrtc-signal", { from: socket.id, data });
+    // Yayın (ekran paylaşımı) başlatma
+    socket.on("start-screen-share", () => {
+        const user = users[socket.id];
+        if (!user) return;
+        const channel = user.channel;
+        if (!screenBroadcasters[channel]) screenBroadcasters[channel] = [];
+        // Eğer o kullanıcı zaten listede yoksa ekle
+        if (!screenBroadcasters[channel].find(u => u.id === socket.id)) {
+            screenBroadcasters[channel].push({ id: socket.id, username: user.username });
+        }
+        broadcastScreenBroadcasters(channel);
     });
+
+    // Yayın bitirme
+    socket.on("stop-screen-share", () => {
+        const user = users[socket.id];
+        if (!user) return;
+        const channel = user.channel;
+        if (screenBroadcasters[channel]) {
+            screenBroadcasters[channel] = screenBroadcasters[channel].filter(u => u.id !== socket.id);
+            broadcastScreenBroadcasters(channel);
+        }
+    });
+
+    // WebRTC sinyalleşme (yayın için)
     socket.on("webrtc-signal-screen", ({ to, data }) => {
         io.to(to).emit("webrtc-signal-screen", { from: socket.id, data });
     });
 
-    socket.on("get-users-in-voice", () => {
-        const channel = users[socket.id]?.channel;
-        const inChannel = Object.entries(users)
-            .filter(([_, u]) => u.channel === channel)
-            .map(([id, u]) => ({ id, username: u.username }));
-        socket.emit("voice-users", inChannel);
+    // Sesli oda: WebRTC sinyalleşme
+    socket.on("webrtc-signal", ({ to, data }) => {
+        io.to(to).emit("webrtc-signal", { from: socket.id, data });
     });
-    function broadcastVoiceUsers(channel) {
-        const inChannel = Object.entries(users)
-            .filter(([_, u]) => u.channel === channel)
-            .map(([id, u]) => ({ id, username: u.username }));
-        io.to(channel).emit("voice-users", inChannel);
-    }
 
     socket.on("get-users-in-voice", () => {
         const channel = users[socket.id]?.channel;
         broadcastVoiceUsers(channel);
     });
+
     socket.on("disconnect", () => {
         const user = users[socket.id];
         if (user) {
@@ -80,19 +114,17 @@ io.on("connection", (socket) => {
             const channel = user.channel;
             delete users[socket.id];
             broadcastVoiceUsers(channel);
+
+            // Eğer yayıncılar listesinde varsa çıkar ve güncelle
+            if (screenBroadcasters[channel]) {
+                screenBroadcasters[channel] = screenBroadcasters[channel].filter(u => u.id !== socket.id);
+                broadcastScreenBroadcasters(channel);
+            }
         }
     });
-
 });
-
-function getUsers(channel) {
-    return Object.values(users)
-        .filter(u => u.channel === channel)
-        .map(u => u.username);
-}
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log("Sunucu " + PORT + " portunda çalışıyor!");
 });
-
