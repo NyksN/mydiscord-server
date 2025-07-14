@@ -62,28 +62,27 @@ io.on("connection", (socket) => {
             .map(([id, u]) => ({ id, username: u.username }));
         socket.emit("voice-users", inChannel);
     });
-    socket.on("get-users-in-voice", () => {
-        const channel = users[socket.id]?.channel;
+    function broadcastVoiceUsers(channel) {
         const inChannel = Object.entries(users)
             .filter(([_, u]) => u.channel === channel)
             .map(([id, u]) => ({ id, username: u.username }));
-        // Burada: Sesli odaya katılan/çıkan herkese gönder:
         io.to(channel).emit("voice-users", inChannel);
+    }
+
+    socket.on("get-users-in-voice", () => {
+        const channel = users[socket.id]?.channel;
+        broadcastVoiceUsers(channel);
     });
     socket.on("disconnect", () => {
         const user = users[socket.id];
         if (user) {
             io.to(user.channel).emit("user-list", getUsers(user.channel));
+            const channel = user.channel;
             delete users[socket.id];
-        }
-        const channel = user?.channel;
-        if (channel) {
-            const inChannel = Object.entries(users)
-                .filter(([_, u]) => u.channel === channel)
-                .map(([id, u]) => ({ id, username: u.username }));
-            io.to(channel).emit("voice-users", inChannel);
+            broadcastVoiceUsers(channel);
         }
     });
+
 });
 
 function getUsers(channel) {
