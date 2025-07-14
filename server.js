@@ -77,6 +77,8 @@ function getUsers(channel) {
         .map(u => u.username);
 }
 
-server.listen(3001, () => {
-    console.log("Sunucu 3001 portunda çalýþýyor!");
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
+    console.log("Sunucu " + PORT + " portunda çalýþýyor!");
 });
+
