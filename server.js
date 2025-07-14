@@ -1,4 +1,4 @@
-const express = require("express");
+ï»¿const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { Server } = require("socket.io");
@@ -13,13 +13,13 @@ const io = new Server(server, {
 
 let channels = {
     "Genel": [],
-    "Müzik": [],
+    "MÃ¼zik": [],
     "Oyun": [],
 };
 let users = {};
 
 io.on("connection", (socket) => {
-    console.log("Baðlandý:", socket.id);
+    console.log("BaÄŸlandÄ±:", socket.id);
 
     socket.on("join", (username, channel) => {
         users[socket.id] = { username, channel };
@@ -46,7 +46,7 @@ io.on("connection", (socket) => {
         io.to(user.channel).emit("new-message", message);
     });
 
-    // Sesli oda: WebRTC sinyalleþme
+    // Sesli oda: WebRTC sinyalleÅŸme
     socket.on("webrtc-signal", ({ to, data }) => {
         io.to(to).emit("webrtc-signal", { from: socket.id, data });
     });
@@ -79,6 +79,6 @@ function getUsers(channel) {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-    console.log("Sunucu " + PORT + " portunda çalýþýyor!");
+    console.log("Sunucu " + PORT + " portunda Ã§alÄ±ÅŸÄ±yor!");
 });
 
